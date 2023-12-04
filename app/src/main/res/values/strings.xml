@@ -1,3 +1,4 @@
 <resources>
-    <string name="app_name">BreweryFinder</string>
+    <string name="app_name">Brewery Finder</string>
+    <string name="submit_button">Find Brewery</string>
 </resources>

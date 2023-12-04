@@ -1,19 +1,26 @@
 package com.mkmusical.metalkindred.breweryfinder
 
 import android.os.Bundle
+import android.util.Log
 import android.widget.Button
 import android.widget.EditText
 import android.widget.Spinner
+import android.widget.TextView
+import android.widget.Toast
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.setContent
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.tooling.preview.Preview
-import com.mkmusical.metalkindred.breweryfinder.ui.theme.BreweryFinderTheme
+import com.mkmusical.metalkindred.breweryfinder.data.Brewery
+import com.mkmusical.metalkindred.breweryfinder.data.BreweryService
+import okhttp3.FormBody
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
+import okhttp3.RequestBody
+import okio.IOException
+import retrofit2.Call
+import retrofit2.Callback
+import retrofit2.Response
+import retrofit2.Retrofit
+import retrofit2.converter.gson.GsonConverterFactory
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets
 
 class MainActivity : ComponentActivity() {
     lateinit var nameEditText: EditText
@@ -33,20 +40,118 @@ class MainActivity : ComponentActivity() {
         findBreweryButton = findViewById(R.id.findBreweryButton)
 
         findBreweryButton.setOnClickListener {
-            // Handle button click, construct API URL
-            val apiKey = resources.getString(R.string.brewery_api_key)
-            val baseUrl = "https://brewery-api.metalkindred.com/api/GetBreweries"
-
-            val name = nameEditText.text.toString()
-            val state = stateEditText.text.toString()
-            val zip = zipEditText.text.toString()
-            val type = typeSpinner.selectedItem.toString()
-
-            // Construct the final URL with query parameters
-            val apiUrl = "$baseUrl?name=$name&state=$state&by_postal=$zip&type=$type&code=$apiKey"
-
-            // Perform network call or any other action with the constructed API URL
-            // (e.g., use AsyncTask, Retrofit, etc.)
+            // Validate at least one search parameter
+            if (nameEditText.text.isEmpty() && stateEditText.text.isEmpty() && zipEditText.text.isEmpty() && typeSpinner.selectedItem == "Type") {
+                // Display the message
+                showToast("At least one search parameter required")
+            } else {
+                // Perform the search
+                this.performSearch()
+            }
         }
+    }
+
+    private fun performSearch() {
+        val apiKey = StringBuilder()
+        apiKey.append(resources.getString(R.string.brewery_api_key))
+        val encodedApiKey = URLEncoder.encode(apiKey.toString(), StandardCharsets.UTF_8.toString())
+        val baseUrl = "https://getbrewery.azurewebsites.net/api/GetBreweries/"
+        val httpUrl = baseUrl.toHttpUrlOrNull() ?: throw IllegalArgumentException("Invalid URL: $baseUrl")
+
+        val retrofit = Retrofit.Builder()
+            .baseUrl(httpUrl)
+            .addConverterFactory(GsonConverterFactory.create())
+            .build()
+
+
+        val service = retrofit.create(BreweryService::class.java)
+
+        // Create a map to store non-empty parameters
+        val parameters = mutableMapOf<String, String>()
+
+        // Add parameters to the map only if they are not empty
+        nameEditText.text.toString().trim().takeIf { it.isNotEmpty() }?.let { parameters["by_name"] = it }
+        stateEditText.text.toString().trim().takeIf { it.isNotEmpty() }?.let { parameters["by_state"] = it }
+        zipEditText.text.toString().trim().takeIf { it.isNotEmpty() }?.let { parameters["by_postal"] = it }
+        typeSpinner.selectedItem?.toString()?.trim().takeIf { it!!.isNotEmpty() && it != "Type" }?.let {
+            parameters["by_type"] = URLEncoder.encode(it, "UTF-8")
+        }
+
+
+        parameters["code"] = encodedApiKey // Add the API key
+
+        // Perform the API call only if there's at least one non-empty parameter
+        if (parameters.isNotEmpty()) {
+            try{
+                val call = service.getBreweries(
+                    parameters["by_name"],
+                    parameters["by_state"],
+                    parameters["by_postal"],
+                    parameters["by_type"]
+                )
+
+                call.enqueue(object : Callback<List<Brewery>> {
+                    override fun onResponse(call: Call<List<Brewery>>, response: Response<List<Brewery>>) {
+                        Log.d("API_RESPONSE", "Response code: ${response.code()}")
+                        Log.d("API_RESPONSE", "Response body: ${response.body()}")
+                        val urlBuilder = baseUrl.toHttpUrlOrNull()!!.newBuilder()
+                        parameters.forEach { (key, value) -> urlBuilder.addQueryParameter(key, value) }
+                        val apiUrl = urlBuilder.build().toString()
+
+                        Log.d("API_CALL", "API URL: $apiUrl")
+
+                        if (response.isSuccessful) {
+                            val breweries = response.body()
+                            displayBreweries(breweries)
+                        } else {
+                            Log.e("API_RESPONSE", "Unsuccessful response: ${response.errorBody()}")
+                            showToast("Unsuccessful response: ${response.code()}")
+                        }
+                    }
+
+                    override fun onFailure(call: Call<List<Brewery>>, t: Throwable) {
+                        Log.e("API_FAILURE", "API call failed: ${t.stackTraceToString()}")
+
+                    }
+                })
+            } catch (e: Exception){
+                Log.e("API_CALL_ERROR", "Error during API call", e)
+            }
+
+        } else {
+            // Display a message or take appropriate action when no parameters are entered
+            showToast("At least one search parameter required")
+        }
+    }
+
+    private fun encodeApiKey(apiKey: String): String {
+        val requestBody: RequestBody = FormBody.Builder()
+            .add("key", apiKey)
+            .build()
+
+        return requestBody.contentType().toString()
+    }
+
+    private fun displayBreweries(breweries: List<Brewery>?) {
+        val resultTextView = findViewById<TextView>(R.id.resultTextView)
+
+        val resultText = StringBuilder()
+
+        breweries?.forEach { brewery ->
+            resultText.append("Name: ${brewery.name}\n")
+            resultText.append("Address: ${brewery.street ?: ""}, ${brewery.city ?: ""}, ${brewery.state ?: ""}, ${brewery.postalCode ?: ""}\n")
+            resultText.append("Phone: ${brewery.phone ?: ""}\n\n")
+        }
+
+        if (resultText.isEmpty()) {
+            resultText.append("No breweries found.")
+        }
+
+        resultTextView.text = resultText.toString()
+    }
+
+    private fun showToast(message: String) {
+        // Display a toast message
+        Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
     }
 }

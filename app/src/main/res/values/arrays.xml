@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="brewery_types">
+        <item>Type</item>
+        <item>Brew Pub</item>
+        <item>Tap Room</item>
+    </string-array>
+</resources>

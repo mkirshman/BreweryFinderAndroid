@@ -7,6 +7,7 @@
 
     <EditText
         android:id="@+id/nameEditText"
+        android:inputType="text"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:hint="Name"/>
@@ -31,13 +32,29 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_below="@id/zipEditText"
-        android:entries="@array/types"/>
+        android:entries="@array/brewery_types"/>
 
     <Button
         android:id="@+id/findBreweryButton"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_below="@id/typeSpinner"
-        android:text="Find Brewery"/>
+        android:text="@string/submit_button"/>
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_below="@id/findBreweryButton"
+        android:layout_marginTop="16dp">
+
+        <TextView
+            android:id="@+id/resultTextView"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:padding="16dp"
+            android:text=""
+            android:textSize="16sp" />
+
+    </ScrollView>
 
 </RelativeLayout>
